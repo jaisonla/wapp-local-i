@@ -180,7 +180,12 @@ o celular baixa e envia pelo WhatsApp (até 64 MB).
    - *Repository access:* **Only select repositories** → `wapp-arquivos`
    - *Permissions → Repository permissions → Contents:* **Read-only**
    - Escolha uma validade (ex.: 1 ano) e copie o token (`github_pat_...`).
-3. No `.env` do celular, preencha `GITHUB_TOKEN=github_pat_...` e rode `pm2 restart whatsapp`.
+3. No `.env` do celular, preencha e rode `pm2 restart whatsapp`:
+   ```
+   CAIXA_SAIDA=seu-usuario/wapp-arquivos
+   GITHUB_TOKEN=github_pat_...
+   ```
+   Com `CAIXA_SAIDA` preenchido, o conector informa ao Claude, em toda conversa, onde subir os arquivos.
 
 **No dia a dia:** peça ao Claude para enviar o arquivo. Ele coloca o arquivo em `wapp-arquivos`
 e chama a ferramenta `enviar_arquivo_url` com o link. Na primeira vez, o Claude pede para você liberar
@@ -208,6 +213,8 @@ Outras rotas: `GET /api/conversas?tipo=grupo&limite=50`, `GET /api/buscar?q=mari
 | `INTERVALO_MIN_MS` / `INTERVALO_MAX_MS` | 2500 / 6000 | Espera aleatória entre envios |
 | `LIMITE_DIA` | 200 | Máximo de envios por dia |
 | `DESTINOS_PERMITIDOS` | vazio (todos) | Restringe a números, ids ou nomes de grupo, separados por vírgula |
+| `CAIXA_SAIDA` | vazio | Repositório (dono/nome) onde o Claude coloca os arquivos |
+| `CAIXA_PASTA` | saida | Pasta dentro desse repositório |
 | `GITHUB_TOKEN` | vazio | Token só de leitura da caixa de saída de arquivos |
 | `HOSTS_ARQUIVOS` | vazio | Outros sites de onde o robô pode baixar arquivos |
 | `LIMITE_ARQUIVO_MB` | 64 | Tamanho máximo de arquivo |

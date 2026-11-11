@@ -17,6 +17,8 @@ export const config = {
   exigirConhecido: /^(1|true|sim)$/i.test(process.env.EXIGIR_CONVERSA_EXISTENTE || ''),
   linkPainel: process.env.LINK_PAINEL || 'https://web.jaison.eng.br/conectar',
   githubToken: process.env.GITHUB_TOKEN || '',
+  caixaSaida: (process.env.CAIXA_SAIDA || '').trim(),          // dono/repositório da caixa de saída
+  caixaPasta: (process.env.CAIXA_PASTA || 'saida').replace(/^\/+|\/+$/g, ''),
   hostsArquivos: lista(process.env.HOSTS_ARQUIVOS),
   limiteArquivoMb: num(process.env.LIMITE_ARQUIVO_MB, 64),
   telegramToken: process.env.TELEGRAM_BOT_TOKEN || '',
