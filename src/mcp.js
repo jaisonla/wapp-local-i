@@ -1,0 +1,97 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
+import { estado, enviar, listarGrupos, conferirDestino, listarConversas, buscarContato, contagemAgenda } from './whatsapp.js';
+import { config } from './config.js';
+
+const texto = obj => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] });
+const erro = e => ({ isError: true, content: [{ type: 'text', text: (e.message || String(e)) + (e.candidatos?.length ? '\nCandidatos:\n' + JSON.stringify(e.candidatos, null, 2) : '') }] });
+
+function criarServidor() {
+  const s = new McpServer(
+    { name: 'whatsapp-jaison', version: '1.0.0' },
+    { instructions: 'Envia mensagens de WhatsApp pelo número do robô de Jaison Alves. Antes de qualquer envio: 1) chame conferir_destino; 2) se vier mais de um candidato ou aviso, pergunte ao usuário qual é o certo; 3) mostre ao usuário o nome e o número que o destino resolveu e o texto, e só envie após confirmação, a menos que a tarefa já defina exatamente o destino e o conteúdo. Use buscar_contato e listar_conversas para achar pessoas e grupos.' }
+  );
+
+  s.registerTool('status_whatsapp', {
+    title: 'Status do WhatsApp',
+    description: 'Mostra se o WhatsApp do robô está conectado, o número em uso e quantos envios foram feitos hoje.',
+    inputSchema: {},
+    annotations: { readOnlyHint: true }
+  }, async () => texto({ status: estado.status, desde: estado.desde, conta: estado.conta, enviosHoje: estado.enviosHoje, limiteDia: config.limiteDia, filaPendente: estado.filaPendente, painel: config.linkPainel }));
+
+  s.registerTool('listar_conversas', {
+    title: 'Listar conversas',
+    description: 'Lista as conversas e grupos que o WhatsApp do robô conhece, das mais recentes para as mais antigas, com nome, número ou id e data da última conversa.',
+    inputSchema: {
+      tipo: z.enum(['pessoa', 'grupo']).optional().describe('Filtrar por pessoas ou grupos'),
+      limite: z.number().int().min(1).max(200).optional().describe('Quantidade, padrão 30')
+    },
+    annotations: { readOnlyHint: true }
+  }, async ({ tipo, limite }) => texto({ total: contagemAgenda(), conversas: listarConversas({ tipo, limite: limite || 30 }) }));
+
+  s.registerTool('buscar_contato', {
+    title: 'Buscar contato ou grupo',
+    description: 'Procura nas conversas por nome (tolera acentos e erros de digitação) ou por parte do número. Devolve candidatos com nota de semelhança de 0 a 1.',
+    inputSchema: {
+      termo: z.string().min(2).describe('Nome, apelido, nome do grupo ou parte do número'),
+      tipo: z.enum(['pessoa', 'grupo']).optional()
+    },
+    annotations: { readOnlyHint: true }
+  }, async ({ termo, tipo }) => texto(buscarContato(termo, { tipo, limite: 10 })));
+
+  s.registerTool('conferir_destino', {
+    title: 'Conferir destino',
+    description: 'Mostra para quem uma mensagem iria, sem enviar: nome, número, se já existe conversa e se o destino é ambíguo. Use sempre antes de enviar.',
+    inputSchema: { para: z.string().describe('Número com DDD, nome da pessoa ou do grupo, ou id') },
+    annotations: { readOnlyHint: true }
+  }, async ({ para }) => texto(await conferirDestino(para)));
+
+  s.registerTool('listar_grupos', {
+    title: 'Listar grupos',
+    description: 'Lista os grupos de WhatsApp de que o robô participa, com id e nome. Use o filtro para buscar por parte do nome.',
+    inputSchema: { filtro: z.string().optional().describe('Parte do nome do grupo') },
+    annotations: { readOnlyHint: true }
+  }, async ({ filtro }) => { try { return texto(await listarGrupos(filtro)); } catch (e) { return erro(e); } });
+
+  s.registerTool('enviar_mensagem', {
+    title: 'Enviar mensagem de texto',
+    description: 'Envia uma mensagem de texto. "para" aceita número com DDD (ex.: 69999990000), id, ou o nome da pessoa ou do grupo. Se o nome for ambíguo ou o número estiver incompleto, nada é enviado e voltam os candidatos. Chame conferir_destino antes.',
+    inputSchema: {
+      para: z.string().describe('Número com DDD, nome ou id'),
+      texto: z.string().min(1).describe('Texto da mensagem. Aceita *negrito* e _itálico_ do WhatsApp.')
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
+  }, async ({ para, texto: t }) => { try { return texto({ enviado: true, ...(await enviar({ para, texto: t })) }); } catch (e) { return erro(e); } });
+
+  s.registerTool('enviar_arquivo', {
+    title: 'Enviar arquivo',
+    description: 'Envia um arquivo em base64: PDF, imagem, planilha, documento, vídeo ou áudio (até 16 MB). Imagens vão como foto; os demais como documento.',
+    inputSchema: {
+      para: z.string().describe('Número com DDD, nome ou id'),
+      arquivo_base64: z.string().min(8).describe('Conteúdo do arquivo em base64 (aceita prefixo data:...;base64,)'),
+      nome_arquivo: z.string().describe('Nome com extensão, ex.: relatorio-diario.pdf'),
+      legenda: z.string().optional().describe('Texto que acompanha o arquivo'),
+      mimetype: z.string().optional().describe('Tipo MIME; se omitido, é deduzido pela extensão')
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
+  }, async ({ para, arquivo_base64, nome_arquivo, legenda, mimetype }) => {
+    try { return texto({ enviado: true, ...(await enviar({ para, arquivoBase64: arquivo_base64, nomeArquivo: nome_arquivo, legenda, mimetype })) }); }
+    catch (e) { return erro(e); }
+  });
+  return s;
+}
+
+/** Handler Express para POST /mcp/:segredo (modo sem sessão: um servidor por requisição). */
+export async function tratarMcp(req, res) {
+  const servidor = criarServidor();
+  const transporte = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  res.on('close', () => { transporte.close(); servidor.close(); });
+  try {
+    await servidor.connect(transporte);
+    await transporte.handleRequest(req, res, req.body);
+  } catch (e) {
+    console.error('[mcp]', e);
+    if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Erro interno' }, id: null });
+  }
+}

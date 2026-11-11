@@ -1,0 +1,22 @@
+{
+  "name": "wapp-local",
+  "version": "1.0.0",
+  "description": "Envio de WhatsApp via Baileys, com página de conexão e conector MCP",
+  "scripts": {
+    "start": "node src/index.js",
+    "configurar": "node scripts/configurar.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "baileys": "7.0.0-rc14",
+    "dotenv": "17.2.3",
+    "express": "5.1.0",
+    "pino": "10.1.0",
+    "qrcode": "1.5.4",
+    "zod": "4.1.12"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
