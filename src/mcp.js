@@ -10,7 +10,7 @@ const erro = e => ({ isError: true, content: [{ type: 'text', text: (e.message |
 function criarServidor() {
   const s = new McpServer(
     { name: 'whatsapp-jaison', version: '1.0.0' },
-    { instructions: 'Envia mensagens de WhatsApp pelo número do robô de Jaison Alves. Antes de qualquer envio: 1) chame conferir_destino; 2) se vier mais de um candidato ou aviso, pergunte ao usuário qual é o certo; 3) mostre ao usuário o nome e o número que o destino resolveu e o texto, e só envie após confirmação, a menos que a tarefa já defina exatamente o destino e o conteúdo. Use buscar_contato e listar_conversas para achar pessoas e grupos.' }
+    { instructions: 'Envia mensagens de WhatsApp pelo número do robô de Jaison Alves. Antes de qualquer envio: 1) chame conferir_destino; 2) se vier mais de um candidato ou aviso, pergunte ao usuário qual é o certo; 3) mostre ao usuário o nome e o número que o destino resolveu e o texto, e só envie após confirmação, a menos que a tarefa já defina exatamente o destino e o conteúdo. Use buscar_contato e listar_conversas para achar pessoas e grupos. Para arquivos maiores que uns 30 KB, não use base64: suba o arquivo para a caixa de saída no GitHub (repositório privado do usuário) e use enviar_arquivo_url com o link.' }
   );
 
   s.registerTool('status_whatsapp', {
@@ -66,7 +66,7 @@ function criarServidor() {
 
   s.registerTool('enviar_arquivo', {
     title: 'Enviar arquivo',
-    description: 'Envia um arquivo em base64: PDF, imagem, planilha, documento, vídeo ou áudio (até 16 MB). Imagens vão como foto; os demais como documento.',
+    description: 'Envia um arquivo pequeno (até uns 30 KB) em base64. Para arquivos maiores, use enviar_arquivo_url. Imagens vão como foto; os demais como documento.',
     inputSchema: {
       para: z.string().describe('Número com DDD, nome ou id'),
       arquivo_base64: z.string().min(8).describe('Conteúdo do arquivo em base64 (aceita prefixo data:...;base64,)'),
@@ -77,6 +77,21 @@ function criarServidor() {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
   }, async ({ para, arquivo_base64, nome_arquivo, legenda, mimetype }) => {
     try { return texto({ enviado: true, ...(await enviar({ para, arquivoBase64: arquivo_base64, nomeArquivo: nome_arquivo, legenda, mimetype })) }); }
+    catch (e) { return erro(e); }
+  });
+  s.registerTool('enviar_arquivo_url', {
+    title: 'Enviar arquivo por link',
+    description: 'Envia um arquivo que está num link: o celular do robô baixa e envia. Use para arquivos grandes (relatórios em PDF, planilhas, fotos), em vez de enviar_arquivo. Aceita links de arquivo do GitHub, inclusive de repositório privado (ex.: https://github.com/dono/repo/blob/main/saida/relatorio.pdf), e dos sites listados em HOSTS_ARQUIVOS. Limite padrão de 64 MB.',
+    inputSchema: {
+      para: z.string().describe('Número com DDD, nome ou id'),
+      url: z.string().url().describe('Link https do arquivo'),
+      nome_arquivo: z.string().optional().describe('Nome com extensão que o destinatário verá; se omitido, usa o do link'),
+      legenda: z.string().optional().describe('Texto que acompanha o arquivo'),
+      mimetype: z.string().optional().describe('Tipo MIME; se omitido, é deduzido pela extensão')
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
+  }, async ({ para, url, nome_arquivo, legenda, mimetype }) => {
+    try { return texto({ enviado: true, ...(await enviar({ para, arquivoUrl: url, nomeArquivo: nome_arquivo, legenda, mimetype })) }); }
     catch (e) { return erro(e); }
   });
   return s;

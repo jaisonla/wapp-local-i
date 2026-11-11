@@ -9,6 +9,7 @@ import makeWASocket, {
 import { config } from './config.js';
 import { alertar } from './alerta.js';
 import * as agenda from './agenda.js';
+import { baixarArquivo } from './arquivos.js';
 
 agenda.carregar();
 
@@ -211,7 +212,7 @@ export function enviar(pedido) {
   return tarefa;
 }
 
-async function enviarAgora({ para, texto, arquivoBase64, nomeArquivo, mimetype, legenda }) {
+async function enviarAgora({ para, texto, arquivoBase64, arquivoUrl, nomeArquivo, mimetype, legenda }) {
   exigirConexao();
   if (estado.diaContagem !== hoje()) { estado.diaContagem = hoje(); estado.enviosHoje = 0; }
   if (estado.enviosHoje >= config.limiteDia) throw new Error(`Limite diário de ${config.limiteDia} envios atingido.`);
@@ -221,11 +222,17 @@ async function enviarAgora({ para, texto, arquivoBase64, nomeArquivo, mimetype, 
   if (config.exigirConhecido && !dest.conhecido) throw new Error(`"${rotulo}" não está nas conversas do robô e EXIGIR_CONVERSA_EXISTENTE está ativo.`);
 
   let conteudo;
-  if (arquivoBase64) {
-    const limpo = String(arquivoBase64).replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
-    const buffer = Buffer.from(limpo, 'base64');
-    if (!buffer.length) throw new Error('O arquivo em base64 está vazio ou inválido.');
-    if (buffer.length > 16 * 1024 * 1024) throw new Error('Arquivo maior que 16 MB.');
+  if (arquivoBase64 || arquivoUrl) {
+    let buffer;
+    if (arquivoUrl) {
+      const b = await baixarArquivo(arquivoUrl);
+      buffer = b.buffer; nomeArquivo = nomeArquivo || b.nome; mimetype = mimetype || b.mimetype;
+    } else {
+      const limpo = String(arquivoBase64).replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
+      buffer = Buffer.from(limpo, 'base64');
+      if (!buffer.length) throw new Error('O arquivo em base64 está vazio ou inválido.');
+    }
+    if (buffer.length > config.limiteArquivoMb * 1024 * 1024) throw new Error(`Arquivo maior que ${config.limiteArquivoMb} MB.`);
     const nome = nomeArquivo || 'arquivo';
     const tipo = mimetype || MIME[nome.split('.').pop().toLowerCase()] || 'application/octet-stream';
     const cap = legenda ?? texto ?? undefined;
@@ -241,7 +248,7 @@ async function enviarAgora({ para, texto, arquivoBase64, nomeArquivo, mimetype, 
   try { await sock.sendPresenceUpdate('composing', jid); await espera(800 + Math.random() * 1200); await sock.sendPresenceUpdate('paused', jid); } catch {}
   const r = await sock.sendMessage(jid, conteudo);
   estado.enviosHoje++;
-  const registro = { quando: new Date().toISOString(), para: rotulo, numero: dest.numero, jid, conhecido: dest.conhecido, tipo: Object.keys(conteudo)[0], arquivo: nomeArquivo || null, id: r?.key?.id };
+  const registro = { quando: new Date().toISOString(), para: rotulo, numero: dest.numero, jid, conhecido: dest.conhecido, tipo: Object.keys(conteudo)[0], arquivo: nomeArquivo || null, tamanhoKb: conteudo.text ? undefined : Math.round((conteudo.document || conteudo.image || conteudo.video || conteudo.audio).length / 1024), id: r?.key?.id };
   fs.appendFile(path.join(config.pastaLogs, 'envios.jsonl'), JSON.stringify(registro) + '\n', () => {});
   return registro;
 }

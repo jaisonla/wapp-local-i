@@ -128,7 +128,8 @@ Ferramentas disponíveis:
 | `conferir_destino` | Mostra para quem a mensagem iria, sem enviar |
 | `listar_grupos` | Grupos de que o robô participa |
 | `enviar_mensagem` | Envia texto |
-| `enviar_arquivo` | Envia PDF, imagem, planilha etc. em base64, até 16 MB |
+| `enviar_arquivo` | Envia arquivo pequeno (até ~30 KB) em base64 |
+| `enviar_arquivo_url` | Envia arquivo grande a partir de um link (GitHub), até 64 MB |
 
 O Claude é instruído a chamar `conferir_destino` antes de cada envio e a mostrar nome e número para você confirmar.
 
@@ -165,7 +166,29 @@ A lista é relida sozinha quando o arquivo muda.
 
 Para só permitir envios a quem já está nas conversas, use `EXIGIR_CONVERSA_EXISTENTE=sim` no `.env`.
 
-## 8. API (opcional)
+## 8. Enviar arquivos grandes (PDF, planilhas, fotos)
+
+Pelo conector, o Claude só consegue mandar arquivos pequenos (até uns 30 KB) dentro do pedido.
+Para arquivos maiores, ele sobe o arquivo para uma **caixa de saída no GitHub** e manda só o link;
+o celular baixa e envia pelo WhatsApp (até 64 MB).
+
+**Configurar uma vez:**
+
+1. No GitHub, crie um repositório **privado** vazio, por exemplo `wapp-arquivos`.
+2. Crie um token só de leitura: **GitHub → Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token**
+   - *Repository access:* **Only select repositories** → `wapp-arquivos`
+   - *Permissions → Repository permissions → Contents:* **Read-only**
+   - Escolha uma validade (ex.: 1 ano) e copie o token (`github_pat_...`).
+3. No `.env` do celular, preencha `GITHUB_TOKEN=github_pat_...` e rode `pm2 restart whatsapp`.
+
+**No dia a dia:** peça ao Claude para enviar o arquivo. Ele coloca o arquivo em `wapp-arquivos`
+e chama a ferramenta `enviar_arquivo_url` com o link. Na primeira vez, o Claude pede para você liberar
+o acesso dele ao repositório `wapp-arquivos`.
+
+Também funciona com outros sites, se você liberar em `HOSTS_ARQUIVOS` (separados por vírgula).
+
+## 9. API (opcional)
 
 ```powershell
 $h = @{ Authorization = "Bearer SEU_API_TOKEN" }
@@ -174,7 +197,7 @@ Invoke-RestMethod https://web.jaison.eng.br/api/enviar -Method Post -Headers $h 
   -ContentType "application/json" -Body '{"para":"69999990000","texto":"Teste do robô"}'
 ```
 
-Campos de `/api/enviar`: `para`, `texto`, e para arquivo `arquivo_base64`, `nome_arquivo`, `legenda`, `mimetype`.
+Campos de `/api/enviar`: `para`, `texto`, e para arquivo `arquivo_base64` **ou** `arquivo_url`, `nome_arquivo`, `legenda`, `mimetype`.
 
 Outras rotas: `GET /api/conversas?tipo=grupo&limite=50`, `GET /api/buscar?q=maria`, `GET /api/conferir?para=obra pier`.
 
@@ -185,6 +208,9 @@ Outras rotas: `GET /api/conversas?tipo=grupo&limite=50`, `GET /api/buscar?q=mari
 | `INTERVALO_MIN_MS` / `INTERVALO_MAX_MS` | 2500 / 6000 | Espera aleatória entre envios |
 | `LIMITE_DIA` | 200 | Máximo de envios por dia |
 | `DESTINOS_PERMITIDOS` | vazio (todos) | Restringe a números, ids ou nomes de grupo, separados por vírgula |
+| `GITHUB_TOKEN` | vazio | Token só de leitura da caixa de saída de arquivos |
+| `HOSTS_ARQUIVOS` | vazio | Outros sites de onde o robô pode baixar arquivos |
+| `LIMITE_ARQUIVO_MB` | 64 | Tamanho máximo de arquivo |
 | `EXIGIR_CONVERSA_EXISTENTE` | nao | Se `sim`, só envia para quem já está nas conversas ou no `contatos.csv` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | vazio | Aviso no Telegram quando o WhatsApp cair |
 

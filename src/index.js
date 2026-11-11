@@ -55,7 +55,7 @@ app.get('/api/conferir', token, async (req, res) => res.json(await conferirDesti
 app.post('/api/enviar', token, async (req, res) => {
   const b = req.body || {};
   try {
-    res.json({ enviado: true, ...(await enviar({ para: b.para, texto: b.texto, arquivoBase64: b.arquivo_base64, nomeArquivo: b.nome_arquivo, legenda: b.legenda, mimetype: b.mimetype })) });
+    res.json({ enviado: true, ...(await enviar({ para: b.para, texto: b.texto, arquivoBase64: b.arquivo_base64, arquivoUrl: b.arquivo_url, nomeArquivo: b.nome_arquivo, legenda: b.legenda, mimetype: b.mimetype })) });
   } catch (e) { res.status(400).json({ enviado: false, erro: e.message, candidatos: e.candidatos || undefined }); }
 });
 
