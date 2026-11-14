@@ -272,3 +272,24 @@ O `.env`, a sessão e a lista de conversas ficam fora do Git e não são afetado
 Este repositório é público: nunca faça commit do `.env`, da pasta `sessao` nem da pasta `dados` (o `.gitignore` já os exclui).
 
 Arquivos que nunca devem ser compartilhados: `.env`, a pasta `sessao` (é o login do WhatsApp) e a pasta `dados` (nomes e números das conversas).
+
+---
+
+## Controle de gastos (grupo + áudio)
+
+Com `GRUPO_GASTOS` preenchido no `.env`, o robô:
+
+- guarda cada mensagem do grupo (texto, áudio, foto com legenda, edição, apagada) em `dados/gastos-mensagens.jsonl`;
+- transcreve os áudios pela Groq (`GROQ_API_KEY`), um por vez, sem processar áudio no aparelho, e responde no grupo citando o áudio;
+- ignora só as mensagens que o próprio script enviou (ids em `dados/enviadas.json`), então o que você digita ou grava à mão no número do robô também conta;
+- oferece ao Claude as ferramentas `ler_mensagens_gastos` e `confirmar_leitura_gastos`.
+
+Instalar e voltar atrás (no Termux):
+
+```bash
+cd ~/wapp-local && git fetch && git checkout gastos-audio && npm install && pm2 restart whatsapp --update-env
+# desfazer
+cd ~/wapp-local && git checkout main && pm2 restart whatsapp --update-env
+```
+
+Acompanhar: `pm2 logs whatsapp --lines 50` (linhas `[gastos]`).

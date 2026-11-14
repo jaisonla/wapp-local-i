@@ -3,13 +3,15 @@ import path from 'node:path';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import makeWASocket, {
-  Browsers, DisconnectReason, fetchLatestBaileysVersion,
+  Browsers, DisconnectReason, fetchLatestBaileysVersion, generateMessageIDV2,
   makeCacheableSignalKeyStore, useMultiFileAuthState
 } from 'baileys';
 import { config } from './config.js';
 import { alertar } from './alerta.js';
 import * as agenda from './agenda.js';
 import { baixarArquivo } from './arquivos.js';
+import * as gastos from './gastos.js';
+import { registrarEnviada } from './enviadas.js';
 
 agenda.carregar();
 
@@ -52,6 +54,7 @@ export async function iniciar() {
 
     sock.ev.on('creds.update', saveCreds);
     agenda.ouvir(sock);
+    gastos.ouvir(sock, { enviar });
     sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
       if (qr) {
         estado.qr = qr;
@@ -212,7 +215,7 @@ export function enviar(pedido) {
   return tarefa;
 }
 
-async function enviarAgora({ para, texto, arquivoBase64, arquivoUrl, nomeArquivo, mimetype, legenda }) {
+async function enviarAgora({ para, texto, arquivoBase64, arquivoUrl, nomeArquivo, mimetype, legenda, citar }) {
   exigirConexao();
   if (estado.diaContagem !== hoje()) { estado.diaContagem = hoje(); estado.enviosHoje = 0; }
   if (estado.enviosHoje >= config.limiteDia) throw new Error(`Limite diário de ${config.limiteDia} envios atingido.`);
@@ -246,7 +249,11 @@ async function enviarAgora({ para, texto, arquivoBase64, arquivoUrl, nomeArquivo
   }
 
   try { await sock.sendPresenceUpdate('composing', jid); await espera(800 + Math.random() * 1200); await sock.sendPresenceUpdate('paused', jid); } catch {}
-  const r = await sock.sendMessage(jid, conteudo);
+  // O id é gerado e guardado antes do envio: o Baileys avisa da própria mensagem antes de sendMessage terminar,
+  // e o controle de gastos precisa saber que foi o script que escreveu.
+  const messageId = generateMessageIDV2(sock.user?.id);
+  registrarEnviada(messageId);
+  const r = await sock.sendMessage(jid, conteudo, { messageId, ...(citar ? { quoted: citar } : {}) });
   estado.enviosHoje++;
   const registro = { quando: new Date().toISOString(), para: rotulo, numero: dest.numero, jid, conhecido: dest.conhecido, tipo: Object.keys(conteudo)[0], arquivo: nomeArquivo || null, tamanhoKb: conteudo.text ? undefined : Math.round((conteudo.document || conteudo.image || conteudo.video || conteudo.audio).length / 1024), id: r?.key?.id };
   fs.appendFile(path.join(config.pastaLogs, 'envios.jsonl'), JSON.stringify(registro) + '\n', () => {});

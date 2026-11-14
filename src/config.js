@@ -24,8 +24,27 @@ export const config = {
   telegramToken: process.env.TELEGRAM_BOT_TOKEN || '',
   telegramChat: process.env.TELEGRAM_CHAT_ID || '',
   pastaSessao: process.env.PASTA_SESSAO || 'sessao',
-  pastaLogs: process.env.PASTA_LOGS || 'logs'
+  pastaLogs: process.env.PASTA_LOGS || 'logs',
+  // Controle de gastos (opcional): grupo ouvido, transcrição pela Groq e nomes de quem lança
+  grupoGastos: (process.env.GRUPO_GASTOS || '').trim(),
+  groqKey: (process.env.GROQ_API_KEY || '').trim(),
+  groqModelo: process.env.GROQ_MODELO || 'whisper-large-v3-turbo',
+  audioMaxSeg: num(process.env.AUDIO_MAX_SEG, 120),
+  gastosResponder: !/^(0|false|nao|não)$/i.test(process.env.GASTOS_RESPONDER || 'sim'),
+  pessoasGastos: pessoas(process.env.PESSOAS_GASTOS)
 };
+
+/** "5569999990000=Jaison, 5569988887777=Simone" → Map(chave do número → nome). Ignora o nono dígito. */
+function pessoas(v) {
+  const m = new Map();
+  for (const par of lista(v)) {
+    const [n, ...nome] = par.split(/[=:]/);
+    let d = (n || '').replace(/\D/g, '');
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    if (d.length >= 12 && nome.join('').trim()) m.set(d.slice(0, 4) + d.slice(-8), nome.join(':').trim());
+  }
+  return m;
+}
 
 export function validarConfig() {
   const faltando = [];

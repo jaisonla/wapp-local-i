@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { estado, enviar, listarGrupos, conferirDestino, listarConversas, buscarContato, contagemAgenda } from './whatsapp.js';
 import { config } from './config.js';
+import * as gastos from './gastos.js';
 
 const texto = obj => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] });
 const erro = e => ({ isError: true, content: [{ type: 'text', text: (e.message || String(e)) + (e.candidatos?.length ? '\nCandidatos:\n' + JSON.stringify(e.candidatos, null, 2) : '') }] });
@@ -110,6 +111,26 @@ function criarServidor() {
     try { return texto({ enviado: true, ...(await enviar({ para, arquivoUrl: url, nomeArquivo: nome_arquivo, legenda, mimetype })) }); }
     catch (e) { return erro(e); }
   });
+  if (gastos.ativo()) {
+    s.registerTool('ler_mensagens_gastos', {
+      title: 'Ler mensagens do grupo de gastos',
+      description: 'Devolve as mensagens do grupo de gastos ainda não confirmadas (ou as depois de "desde"), em ordem: seq, id, quando (UTC), autor, ' +
+        'tipo (texto, audio, imagem, documento, edicao, apagada), texto, transcricao (áudios), erro e respondendo (id da mensagem citada, editada ou apagada). ' +
+        'Depois de lançar os gastos, chame confirmar_leitura_gastos com o maior seq lançado.',
+      inputSchema: {
+        desde: z.number().int().min(0).optional().describe('Devolve as de seq maior que este; padrão: as não confirmadas'),
+        limite: z.number().int().min(1).max(500).optional().describe('Máximo de mensagens, padrão 200')
+      },
+      annotations: { readOnlyHint: true }
+    }, async ({ desde, limite }) => texto(gastos.lerMensagens({ desde, limite: limite || 200 })));
+
+    s.registerTool('confirmar_leitura_gastos', {
+      title: 'Confirmar leitura do grupo de gastos',
+      description: 'Marca como lidas as mensagens do grupo de gastos até ate_seq. Chame só depois de lançar esses gastos no dashboard.',
+      inputSchema: { ate_seq: z.number().int().min(0).describe('Maior seq já lançado') },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true }
+    }, async ({ ate_seq }) => { try { return texto(gastos.confirmarLeitura(ate_seq)); } catch (e) { return erro(e); } });
+  }
   return s;
 }
 
